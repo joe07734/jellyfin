@@ -1591,7 +1591,8 @@ namespace MediaBrowser.Controller.Entities
 
             if (string.IsNullOrEmpty(rating))
             {
-                Logger.LogDebug("{0} has no parental rating set.", Name);
+                // @@@ Joe
+                // Logger.LogDebug("{0} has no parental rating set.", Name);
                 return !GetBlockUnratedValue(user);
             }
 
