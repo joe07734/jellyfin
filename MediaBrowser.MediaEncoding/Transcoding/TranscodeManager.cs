@@ -119,7 +119,8 @@ public sealed class TranscodeManager : ITranscodeManager, IDisposable
     {
         ArgumentException.ThrowIfNullOrEmpty(playSessionId);
 
-        _logger.LogDebug("PingTranscodingJob PlaySessionId={0} isUsedPaused: {1}", playSessionId, isUserPaused);
+        // @@@ Joe
+        // _logger.LogDebug("PingTranscodingJob PlaySessionId={0} isUsedPaused: {1}", playSessionId, isUserPaused);
 
         List<TranscodingJob> jobs;
 

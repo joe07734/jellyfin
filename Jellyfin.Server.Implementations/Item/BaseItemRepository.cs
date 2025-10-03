@@ -312,6 +312,17 @@ public sealed class BaseItemRepository
 
         using var context = _dbProvider.CreateDbContext();
 
+        // if (collectionType == CollectionType.music)
+        // {
+        //     var IQueryable<BaseItemEntity> dbQuery = context.BaseItems.AsNoTracking().AsSingleQuery();
+        //     return dbQuery.AsEnumerable().FromSql($@"
+        //         SELECT *
+        //         FROM TypedBaseItems
+        //         WHERE MediaType='Audio'
+        //         LIMIT 10
+        //     ").ToArray();
+        // }
+
         // Subquery to group by SeriesNames/Album and get the max Date Created for each group.
         var subquery = PrepareItemQuery(context, filter);
         subquery = TranslateQuery(subquery, context, filter);
