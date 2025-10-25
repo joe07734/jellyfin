@@ -1243,8 +1243,20 @@ public sealed class BaseItemRepository
             ExcludeItemIds = filter.ExcludeItemIds
         };
 
-        var query = TranslateQuery(innerQuery, context, outerQueryFilter)
-            .GroupBy(e => e.PresentationUniqueKey);
+        var masterQuery = TranslateQuery(innerQuery, context, outerQueryFilter)
+            .GroupBy(e => e.PresentationUniqueKey)
+            .Select(e => e.FirstOrDefault())
+            .Select(e => e!.Id);
+
+        var query = context.BaseItems
+            .Include(e => e.TrailerTypes)
+            .Include(e => e.Provider)
+            .Include(e => e.LockedFields)
+            .Include(e => e.Images)
+            .AsSingleQuery()
+            .Where(e => masterQuery.Contains(e.Id));
+
+        query = ApplyOrder(query, filter);
 
         var result = new QueryResult<(BaseItemDto, ItemCounts?)>();
         if (filter.EnableTotalRecordCount)
@@ -1299,12 +1311,7 @@ public sealed class BaseItemRepository
 
             var resultQuery = query.Select(e => new
             {
-                item = e.AsQueryable()
-                        .Include(e => e.TrailerTypes)
-                        .Include(e => e.Provider)
-                        .Include(e => e.LockedFields)
-                        .Include(e => e.Images)
-                        .AsSingleQuery().First(),
+                item = e,
                 // TODO: This is bad refactor!
                 itemCount = new ItemCounts()
                 {
@@ -1336,13 +1343,6 @@ public sealed class BaseItemRepository
             result.Items =
             [
                 .. query
-                    .Select(e => e.AsQueryable()
-                        .Include(e => e.TrailerTypes)
-                        .Include(e => e.Provider)
-                        .Include(e => e.LockedFields)
-                        .Include(e => e.Images)
-                        .AsSingleQuery()
-                        .First())
                     .AsEnumerable()
                     .Where(e => e is not null)
                     .Select<BaseItemEntity, (BaseItemDto, ItemCounts?)>(e =>
@@ -1886,10 +1886,17 @@ public sealed class BaseItemRepository
 
         if (filter.PersonIds.Length > 0)
         {
+            var peopleEntityIds = context.BaseItems
+                .WhereOneOrMany(filter.PersonIds, b => b.Id)
+                .Join(
+                    context.Peoples,
+                    b => b.Name,
+                    p => p.Name,
+                    (b, p) => p.Id);
+
             baseQuery = baseQuery
-                .Where(e =>
-                    context.PeopleBaseItemMap.Where(w => context.BaseItems.Where(r => filter.PersonIds.Contains(r.Id)).Any(f => f.Name == w.People.Name))
-                        .Any(f => f.ItemId == e.Id));
+                .Where(e => context.PeopleBaseItemMap
+                    .Any(m => m.ItemId == e.Id && peopleEntityIds.Contains(m.PeopleId)));
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Person))
@@ -2018,7 +2025,7 @@ public sealed class BaseItemRepository
 
         if (filter.ArtistIds.Length > 0)
         {
-            baseQuery = baseQuery.WhereReferencedItem(context, ItemValueType.Artist, filter.ArtistIds);
+            baseQuery = baseQuery.WhereReferencedItemMultipleTypes(context, [ItemValueType.Artist, ItemValueType.AlbumArtist], filter.ArtistIds);
         }
 
         if (filter.AlbumArtistIds.Length > 0)
@@ -2028,7 +2035,18 @@ public sealed class BaseItemRepository
 
         if (filter.ContributingArtistIds.Length > 0)
         {
-            baseQuery = baseQuery.WhereReferencedItem(context, ItemValueType.Artist, filter.ContributingArtistIds);
+            var contributingNames = context.BaseItems
+                .Where(b => filter.ContributingArtistIds.Contains(b.Id))
+                .Select(b => b.CleanName);
+
+            baseQuery = baseQuery.Where(e =>
+                e.ItemValues!.Any(ivm =>
+                    ivm.ItemValue.Type == ItemValueType.Artist &&
+                    contributingNames.Contains(ivm.ItemValue.CleanValue))
+                &&
+                !e.ItemValues!.Any(ivm =>
+                    ivm.ItemValue.Type == ItemValueType.AlbumArtist &&
+                    contributingNames.Contains(ivm.ItemValue.CleanValue)));
         }
 
         if (filter.AlbumIds.Length > 0)
